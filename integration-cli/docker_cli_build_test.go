@@ -590,6 +590,39 @@ ADD %s/file /`
 
 }
 
+// Regression for https://github.com/docker/docker/pull/27805
+// Makes sure that we don't use the cache if the contents of
+// a file in a subfolder of the context is modified and we re-build.
+func (s *DockerSuite) TestBuildModifyFileInFolder(c *check.C) {
+	name := "testbuildmodifyfileinfolder"
+
+	ctx, err := fakeContext(`FROM busybox
+RUN ["mkdir", "/test"]
+ADD folder/file /test/changetarget`,
+		map[string]string{})
+	if err != nil {
+		c.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.Add("folder/file", "first"); err != nil {
+		c.Fatal(err)
+	}
+	id1, err := buildImageFromContext(name, ctx, true)
+	if err != nil {
+		c.Fatal(err)
+	}
+	if err := ctx.Add("folder/file", "second"); err != nil {
+		c.Fatal(err)
+	}
+	id2, err := buildImageFromContext(name, ctx, true)
+	if err != nil {
+		c.Fatal(err)
+	}
+	if id1 == id2 {
+		c.Fatal("cache was used even though file contents in folder was changed")
+	}
+}
+
 func (s *DockerSuite) TestBuildAddSingleFileToRoot(c *check.C) {
 	testRequires(c, DaemonIsLinux) // Linux specific test
 	name := "testaddimg"
@@ -3577,8 +3610,8 @@ RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/do
 
 # Switch back to root and double check that worked exactly as we might expect it to
 USER root
+# Add a "supplementary" group for our dockerio user
 RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '0:0/root:root/0 10:root wheel' ] && \
-	# Add a "supplementary" group for our dockerio user \
 	echo 'supplementary:x:1002:dockerio' >> /etc/group
 
 # ... and then go verify that we get it like we expect
@@ -7105,4 +7138,39 @@ func (s *DockerSuite) TestBuildNetContainer(c *check.C) {
 
 	host, _ := dockerCmd(c, "run", "testbuildnetcontainer", "cat", "/otherhost")
 	c.Assert(strings.TrimSpace(host), check.Equals, "foobar")
+}
+
+// Test case for #24693
+func (s *DockerSuite) TestBuildRunEmptyLineAfterEscape(c *check.C) {
+	name := "testbuildemptylineafterescape"
+	_, out, err := buildImageWithOut(name,
+		`
+FROM busybox
+RUN echo x \
+
+RUN echo y
+RUN echo z
+# Comment requires the '#' to start from position 1
+# RUN echo w
+`, true)
+	c.Assert(err, checker.IsNil)
+	c.Assert(out, checker.Contains, "Step 1/4 : FROM busybox")
+	c.Assert(out, checker.Contains, "Step 2/4 : RUN echo x")
+	c.Assert(out, checker.Contains, "Step 3/4 : RUN echo y")
+	c.Assert(out, checker.Contains, "Step 4/4 : RUN echo z")
+
+	// With comment, see #24693
+	name = "testbuildcommentandemptylineafterescape"
+	_, out, err = buildImageWithOut(name,
+		`
+FROM busybox
+RUN echo grafana && \
+    echo raintank \
+#echo env-load
+RUN echo vegeta
+`, true)
+	c.Assert(err, checker.IsNil)
+	c.Assert(out, checker.Contains, "Step 1/3 : FROM busybox")
+	c.Assert(out, checker.Contains, "Step 2/3 : RUN echo grafana &&     echo raintank")
+	c.Assert(out, checker.Contains, "Step 3/3 : RUN echo vegeta")
 }

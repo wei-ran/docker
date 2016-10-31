@@ -27,6 +27,8 @@ func newCreateCommand(dockerCli *command.DockerCli) *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.StringVar(&opts.mode, flagMode, "replicated", "Service mode (replicated or global)")
+	flags.StringVar(&opts.name, flagName, "", "Service name")
+
 	addServiceFlags(cmd, opts)
 
 	flags.VarP(&opts.labels, flagLabel, "l", "Service labels")
@@ -37,6 +39,7 @@ func newCreateCommand(dockerCli *command.DockerCli) *cobra.Command {
 	flags.StringSliceVar(&opts.constraints, flagConstraint, []string{}, "Placement constraints")
 	flags.StringSliceVar(&opts.networks, flagNetwork, []string{}, "Network attachments")
 	flags.VarP(&opts.endpoint.ports, flagPublish, "p", "Publish a port as a node port")
+	flags.StringSliceVar(&opts.groups, flagGroup, []string{}, "Set one or more supplementary user groups for the container")
 
 	flags.SetInterspersed(false)
 	return cmd

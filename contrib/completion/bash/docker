@@ -1007,9 +1007,16 @@ _docker_container_exec() {
 }
 
 _docker_container_export() {
+	case "$prev" in
+		--output|-o)
+			_filedir
+			return
+			;;
+	esac
+
 	case "$cur" in
 		-*)
-			COMPREPLY=( $( compgen -W "--help" -- "$cur" ) )
+			COMPREPLY=( $( compgen -W "--help --output -o" -- "$cur" ) )
 			;;
 		*)
 			local counter=$(__docker_pos_first_nonflag)
@@ -1082,6 +1089,10 @@ _docker_container_ls() {
 			__docker_complete_containers_all --cur "${cur##*=}" --id
 			return
 			;;
+		health)
+			COMPREPLY=( $( compgen -W "healthy starting none unhealthy" -- "${cur##*=}" ) )
+			return
+			;;
 		is-task)
 			COMPREPLY=( $( compgen -W "true false" -- "${cur##*=}" ) )
 			return
@@ -1110,7 +1121,7 @@ _docker_container_ls() {
 
 	case "$prev" in
 		--filter|-f)
-			COMPREPLY=( $( compgen -S = -W "ancestor before exited id label name network since status volume" -- "$cur" ) )
+			COMPREPLY=( $( compgen -S = -W "ancestor before exited health id label name network since status volume" -- "$cur" ) )
 			__docker_nospace
 			return
 			;;
@@ -1132,10 +1143,7 @@ _docker_container_pause() {
 			COMPREPLY=( $( compgen -W "--help" -- "$cur" ) )
 			;;
 		*)
-			local counter=$(__docker_pos_first_nonflag)
-			if [ $cword -eq $counter ]; then
-				__docker_complete_containers_running
-			fi
+			__docker_complete_containers_running
 			;;
 	esac
 }
@@ -2550,7 +2558,7 @@ _docker_service_ps() {
 
 	case "$cur" in
 		-*)
-			COMPREPLY=( $( compgen -W "--all -a --filter -f --help --no-resolve --no-trunc" -- "$cur" ) )
+			COMPREPLY=( $( compgen -W "--filter -f --help --no-resolve --no-trunc --quiet -q" -- "$cur" ) )
 			;;
 		*)
 			local counter=$(__docker_pos_first_nonflag '--filter|-f')
@@ -2569,15 +2577,18 @@ _docker_service_update() {
 		--endpoint-mode
 		--env -e
 		--force
-		--group-add
+		--health-cmd
+		--health-interval
+		--health-retries
+		--health-timeout
 		--label -l
 		--limit-cpu
 		--limit-memory
 		--log-driver
 		--log-opt
 		--mount
-		--name
 		--network
+		--no-healthcheck
 		--publish -p
 		--replicas
 		--reserve-cpu
@@ -2607,14 +2618,25 @@ _docker_service_update() {
 	if [ "$subcommand" = "create" ] ; then
 		options_with_args="$options_with_args
 			--container-label
+			--env-file
+			--group
 			--mode
+			--name
 		"
 
 		case "$prev" in
+			--env-file)
+				_filedir
+				return
+				;;
 			--mode)
 				COMPREPLY=( $( compgen -W "global replicated" -- "$cur" ) )
 				return
 				;;
+			--group)
+			COMPREPLY=( $(compgen -g -- "$cur") )
+			return
+			;;
 		esac
 	fi
 	if [ "$subcommand" = "update" ] ; then
@@ -2622,11 +2644,16 @@ _docker_service_update() {
 			--arg
 			--container-label-add
 			--container-label-rm
+			--group-add
 			--group-rm
 			--image
 		"
 
 		case "$prev" in
+			--group-add)
+				COMPREPLY=( $(compgen -g -- "$cur") )
+				return
+				;;
 			--group-rm)
 				COMPREPLY=( $(compgen -g -- "$cur") )
 				return
@@ -2647,10 +2674,6 @@ _docker_service_update() {
 			# we do not append a "=" here because "-e VARNAME" is legal systax, too
 			COMPREPLY=( $( compgen -e -- "$cur" ) )
 			__docker_nospace
-			return
-			;;
-		--group-add)
-			COMPREPLY=( $(compgen -g -- "$cur") )
 			return
 			;;
 		--log-driver)
